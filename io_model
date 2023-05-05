@@ -1,0 +1,69 @@
+import pandas as pd
+import numpy as np
+# Load data from CSV file
+df = pd.read_csv("iotable1.csv")
+
+# Divide the "Value" column by one million
+df["Value"] /= 1000000
+
+# Get unique list of industries
+industries = np.unique(df[["From industry / sector", "To industry / sector"]].values)
+
+# Create empty matrix for technical coefficients
+technical_coefficients = np.zeros((len(industries), len(industries)))
+
+# Populate technical coefficients matrix
+for i, row in df.iterrows():
+    from_industry = row["From industry / sector"]
+    to_industry = row["To industry / sector"]
+    value = row["Value"]
+    from_industry_idx = np.where(industries == from_industry)[0][0]
+    to_industry_idx = np.where(industries == to_industry)[0][0]
+    technical_coefficients[to_industry_idx][from_industry_idx] = value / df.loc[df["To industry / sector"] == to_industry]["Value"].sum()
+
+# Create output vector
+output = np.zeros(len(industries))
+for i, industry in enumerate(industries):
+    output[i] = df.loc[df["From industry / sector"] == industry]["Value"].sum()
+
+# Calculate direct requirements matrix
+direct_requirements = np.linalg.inv(np.identity(len(industries)) - technical_coefficients)
+
+# Locate the "air transport" sector
+space_idx = np.where(industries == "space")[0][0]
+
+# Calculate direct effect
+direct_effect = direct_requirements[space_idx][space_idx]
+
+# Calculate indirect effect
+indirect_effect = 0
+for i, industry in enumerate(industries):
+    if i != space_idx:
+        indirect_effect += direct_requirements[space_idx][i] * output[i]
+
+# Calculate induced effect
+induced_effect = direct_effect + indirect_effect
+
+# Calculate total multiplier effect
+total_multiplier_effect = 1 / (1 - technical_coefficients[space_idx][space_idx])
+
+# Summarize the multiplier effect by sector
+multiplier_effect_by_sector = {}
+for i, industry in enumerate(industries):
+    if i != space_idx:
+        multiplier_effect = total_multiplier_effect * direct_requirements[space_idx][i]
+        multiplier_effect_by_sector[industry] = multiplier_effect
+
+# Sort the sectors by descending order of total multiplier effect
+sorted_sectors = sorted(multiplier_effect_by_sector.items(), key=lambda x: x[1], reverse=True)
+
+# Print summary table
+print("Multiplier Effect Summary Table")
+print("Sector\t\t\t\tMultiplier Effect")
+print("----------------------------------------")
+for sector, effect in sorted_sectors:
+    print(f"{sector}\t\t\t{effect:.4f}")
+print(f"Direct Effect:\t\t\t{direct_effect:.4f}")
+print(f"Indirect Effect:\t\t{indirect_effect:.4f}")
+print(f"Induced Effect:\t\t\t{induced_effect:.4f}")
+print(f"Total Multiplier Effect:\t{total_multiplier_effect:.4f}")
